@@ -2,16 +2,13 @@ import pathlib
 import math
 import random
 
-# if i pick 3 or 4 students randomly, what is their average group score? what is the standard deviation?
-# when i go to create all groups, if there is a group more than 1? 0.5? standard deviation below the mean this means there is a group that is a total dud
-# start over and try to create groups again
-
 period = "I"
+# how many previous seating charts have I used in this class
+current_iteration = 1
 
+# read in data on individual students
 stats_path = pathlib.Path.cwd() / f"Documents/Grouper/Period{period}stats.csv"
-
 student_stats = {}
-
 class_size = 0
 for row in stats_path.read_text().split("\n")[1:]:
     if row:
@@ -23,10 +20,9 @@ for row in stats_path.read_text().split("\n")[1:]:
         student_stats[row_split[0]]["social"] = int(row_split[3])
         student_stats[row_split[0]]["math"] = int(row_split[4])
 
+# read in data on who they've worked with and where they've sat before
 history_path = pathlib.Path.cwd() / f"Documents/Grouper/Period{period}history.csv"
-
 student_history = {}
-
 for row in history_path.read_text().split("\n")[1:]:
     if row:
         row_split = row.split(",")
@@ -38,25 +34,27 @@ for row in history_path.read_text().split("\n")[1:]:
             student_history[row_split[s]][row_split[4]]["members"].remove(row_split[s])
 
 
+# define number of 3 or 4-person groups
+num_groups = math.ceil(class_size / 4)
+
+# define number of 3-person groups I will need to have
+num_trios = 4 - (class_size % 4)
+
 # goal of new groups is to get students to work with others they have not worked with before
 # and to sit in a different place in the classroom than they have before
 # and to be balanced with gender, race, and ability level
-
-# define number of groups
-num_groups = math.ceil(class_size / 4)
-
-# define number of 3 person groups
-num_trios = 4 - (class_size % 4)
-
 groups = list(range(1, num_groups + 1))
-current_iteration = 3
 best_groups = []
 for trial_count in range(0, 100000):
+
+    # shuffle the list of students randomly
     student_names = list(student_stats.keys())
     new_groups = {}
     random.shuffle(groups)
     random.shuffle(student_names)
     trios_used = num_trios
+
+    # split them into groups
     for g in groups:
         group_size = 4
         if trios_used > 0:
@@ -67,7 +65,8 @@ for trial_count in range(0, 100000):
             new_groups["group{}".format(g)].append(student_names[s])
         student_names = student_names[group_size:]
 
-    # score the groupings (less negative scores are better)
+    # score the groupings based on heterogeneity of race, gender, social skills, and math skills,
+    desired_score = 3
     new_groups_score = 0
     social_skills_per_group = []
     math_skills_per_group = []
@@ -76,27 +75,25 @@ for trial_count in range(0, 100000):
         social_skills_group_sum = 0
         math_skills_group_sum = 0
         for s in new_groups[g]:
-
             social_skills_group_sum += student_stats[s]["social"]
             math_skills_group_sum += student_stats[s]["math"]
-
             if student_history:
-                for other_s in new_groups[g]:
+                for other_student in new_groups[g]:
                     for iteration in student_history[s]:
-                        if other_s in student_history[s][iteration]["members"]:
+                        if other_student in student_history[s][iteration]["members"]:
                             new_groups_score -= 1.0 / (current_iteration - int(iteration))
 
-                        if student_stats[s]["gender"] != student_stats[other_s]["gender"]:
+                        if student_stats[s]["gender"] != student_stats[other_student]["gender"]:
                             new_groups_score += 1
 
-                        if student_stats[s]["race"] != student_stats[other_s]["race"]:
+                        if student_stats[s]["race"] != student_stats[other_student]["race"]:
                             new_groups_score += 1
 
                 for iteration in student_history[s]:
                     if g in student_history[s][iteration]["group"]:
                         new_groups_score -= 1.0 / (current_iteration - int(iteration))
 
-        if social_skills_group_sum < 3 or math_skills_group_sum < 3:
+        if social_skills_group_sum < desired_score or math_skills_group_sum < desired_score:
             skip_groupings = True
             break
         else:
@@ -123,8 +120,8 @@ for trial_count in range(0, 100000):
                         best_groups.append(result)
                         break
 
+# write out the top 10 best group options
 options_path = pathlib.Path.cwd() / f"Documents/Grouper/Period{period}options.csv"
-
 options_path.write_text("")
 with options_path.open("a") as f:
     for r in best_groups:
